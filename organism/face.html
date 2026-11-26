@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>harmedi // Gen 0</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    padding: 28px;
+    background: #fafafa;
+    color: #18181b;
+    font: 14px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  }
+  header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid #e4e4e7;
+    padding-bottom: 14px;
+    margin-bottom: 22px;
+  }
+  h1 { margin: 0; font-size: 18px; font-weight: 600; letter-spacing: -0.01em; }
+  .badge {
+    font: 11px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+    background: #18181b;
+    color: #fff;
+    padding: 5px 8px;
+    border-radius: 4px;
+  }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; }
+  .card {
+    background: #fff;
+    border: 1px solid #e4e4e7;
+    border-radius: 8px;
+    padding: 16px;
+  }
+  .card h2 {
+    margin: 0 0 8px;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: #71717a;
+  }
+  .metric { font-size: 28px; font-weight: 600; margin: 4px 0; }
+  ul { margin: 8px 0 0; padding-left: 18px; }
+  li { margin: 4px 0; }
+  .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; color: #52525b; }
+</style>
+</head>
+<body>
+  <header>
+    <h1>harmedi — Personal Companion</h1>
+    <span class="badge" id="gen-badge">GEN 0 · BASELINE</span>
+  </header>
+
+  <div class="grid">
+    <section class="card">
+      <h2>Status</h2>
+      <p id="status-line">Initializing...</p>
+      <p class="mono" id="motto"></p>
+    </section>
+
+    <section class="card">
+      <h2>Creator Alignment</h2>
+      <div class="metric" id="audit-score">100.0%</div>
+      <div class="mono" id="late-night">Late-night commits: 0%</div>
+    </section>
+
+    <section class="card" style="grid-column: 1 / -1;">
+      <h2>Recent Repository Activity</h2>
+      <ul id="commits"></ul>
+    </section>
+  </div>
+
+  <!-- HARMEDI_STATE -->
+  <script>
+    const s = window.__HARMEDI__ || {};
+    document.getElementById("gen-badge").textContent = "GEN " + (s.generation ?? 0) + " · BASELINE";
+    document.getElementById("status-line").textContent = s.dashboard?.statusLine ?? "Nominal.";
+    document.getElementById("motto").textContent = s.meta?.motto ?? "";
+    document.getElementById("audit-score").textContent = s.dashboard?.auditScore ?? "100.0%";
+    document.getElementById("late-night").textContent = "Late-night commits: " + (s.dashboard?.lateNightPct ?? 0) + "%";
+    const list = document.getElementById("commits");
+    const items = s.recentCommits?.length ? s.recentCommits : [];
+    list.innerHTML = items.length
+      ? items.map(c => "<li><span class='mono'>" + c.sha + "</span> — " + c.message + "</li>").join("")
+      : "<li class='mono'>No commits observed yet. Push to main or simulate a commit from the Observation Deck.</li>";
+  </script>
+</body>
+</html>

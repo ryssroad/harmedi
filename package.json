@@ -1,0 +1,16 @@
+{
+  "name": "harmedi",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "A self-mutating personal Dev & Inbox agent locked inside a zero-secret Fly.io Sprite.",
+  "engines": { "node": ">=22.6" },
+  "scripts": {
+    "start": "node --no-warnings cage/server.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.6.0"
+  }
+}

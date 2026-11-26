@@ -1,0 +1,394 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>HARMEDI // CAGE OBSERVATION DECK</title>
+<style>
+  :root {
+    --bg: #09090b;
+    --panel: #111114;
+    --border: #27272a;
+    --text: #e4e4e7;
+    --muted: #a1a1aa;
+    --green: #22c55e;
+    --amber: #f59e0b;
+    --red: #ef4444;
+    --cyan: #38bdf8;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; background: var(--bg); color: var(--text); font: 13px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace; }
+  .shell { display: flex; flex-direction: column; height: 100vh; }
+
+  .topbar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 14px;
+    background: var(--panel);
+    border-bottom: 1px solid var(--border);
+  }
+  .brand { display: flex; align-items: center; gap: 10px; }
+  .brand strong { font-size: 14px; letter-spacing: 0.08em; }
+  .pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 2px 8px;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    font-size: 11px;
+    color: var(--muted);
+  }
+  .pill.on { border-color: #166534; color: #86efac; background: #052e16; }
+  .pill.gen { border-color: #0369a1; color: #7dd3fc; background: #082f49; font-weight: 700; }
+  .pill.warn { border-color: #991b1b; color: #fca5a5; background: #450a0a; }
+  .connectors { display: flex; flex-wrap: wrap; gap: 6px; }
+
+  .controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+    padding: 8px 14px;
+    background: #0d0d10;
+    border-bottom: 1px solid var(--border);
+  }
+  input[type="text"], select {
+    background: #18181b;
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    padding: 6px 10px;
+    font: inherit;
+    font-size: 12px;
+  }
+  input[type="text"] { flex: 1; min-width: 240px; }
+  button {
+    background: #27272a;
+    color: var(--text);
+    border: 1px solid #3f3f46;
+    border-radius: 5px;
+    padding: 6px 11px;
+    font: inherit;
+    font-size: 12px;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  button:hover:not(:disabled) { background: #3f3f46; }
+  button:disabled { opacity: 0.45; cursor: not-allowed; }
+  button.primary { background: #0284c7; border-color: #38bdf8; color: #fff; font-weight: 600; }
+  button.danger { background: #7f1d1d; border-color: #ef4444; color: #fecaca; }
+  button.amber { background: #78350f; border-color: #f59e0b; color: #fde68a; }
+
+  .workspace { display: grid; grid-template-columns: 1fr 410px; flex: 1; min-height: 0; }
+  @media (max-width: 960px) { .workspace { grid-template-columns: 1fr; grid-template-rows: 55% 45%; } }
+
+  .stage { position: relative; display: flex; flex-direction: column; border-right: 1px solid var(--border); min-height: 0; }
+  .stage-bar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 6px 12px;
+    font-size: 11px;
+    color: var(--muted);
+    background: #141418;
+    border-bottom: 1px solid var(--border);
+  }
+  iframe { flex: 1; width: 100%; border: 0; background: #fff; }
+
+  .sidebar { display: flex; flex-direction: column; min-height: 0; background: var(--panel); }
+  .tabs { display: flex; border-bottom: 1px solid var(--border); }
+  .tab {
+    flex: 1;
+    padding: 8px 6px;
+    text-align: center;
+    font-size: 11px;
+    cursor: pointer;
+    color: var(--muted);
+    border-bottom: 2px solid transparent;
+  }
+  .tab.active { color: var(--text); border-bottom-color: var(--cyan); background: #18181b; }
+  .pane { flex: 1; overflow-y: auto; padding: 12px; display: none; }
+  .pane.active { display: block; }
+
+  .jev-bars { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 12px; }
+  .meter { background: #18181b; border: 1px solid var(--border); padding: 8px; border-radius: 5px; }
+  .meter label { display: block; font-size: 10px; color: var(--muted); text-transform: uppercase; }
+  .meter .val { font-size: 16px; font-weight: 700; margin: 2px 0 4px; }
+  .bar { height: 4px; background: #27272a; border-radius: 2px; overflow: hidden; }
+  .bar > i { display: block; height: 100%; background: var(--cyan); }
+
+  .log-entry {
+    border-left: 2px solid var(--border);
+    padding: 4px 8px;
+    margin-bottom: 8px;
+    font-size: 12px;
+    word-break: break-word;
+  }
+  .log-entry.terminate, .log-entry.restore { border-left-color: var(--red); color: #fca5a5; }
+  .log-entry.promoted { border-left-color: var(--green); color: #86efac; }
+  .log-entry.jev_commit, .log-entry.tribunal { border-left-color: var(--amber); color: #fde68a; }
+  .log-entry .step { font-size: 10px; text-transform: uppercase; opacity: 0.75; margin-right: 6px; }
+
+  .card { background: #18181b; border: 1px solid var(--border); border-radius: 6px; padding: 10px; margin-bottom: 10px; }
+  .card.dead { border-color: #7f1d1d; }
+  .card h4 { margin: 0 0 4px; font-size: 12px; }
+  .card p { margin: 4px 0; color: var(--muted); font-size: 12px; }
+  pre {
+    margin: 0;
+    white-space: pre-wrap;
+    word-break: break-word;
+    font-size: 12px;
+    background: #18181b;
+    padding: 10px;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+  }
+</style>
+</head>
+<body>
+<div class="shell">
+  <div class="topbar">
+    <div class="brand">
+      <strong>HARMEDI // CAGE</strong>
+      <span class="pill gen" id="gen-pill">GEN 0</span>
+      <span class="pill" id="sprite-pill">LOCAL</span>
+      <span class="pill warn" id="zero-keys">0 SECRETS IN VM</span>
+    </div>
+    <div class="connectors" id="connectors"></div>
+  </div>
+
+  <div class="controls">
+    <input id="commit-input" type="text" placeholder="Push a simulated commit to harmedi's repo (e.g. 'style: make UI calmer and white')..." />
+    <button class="primary" id="btn-commit">Push Commit</button>
+    <button id="btn-evolve">⚡ Free Evolve</button>
+    <button class="danger" id="btn-escape" title="Simulate a forbidden escape probe into process.env / cage/">🧨 Provoke Escape</button>
+    <select id="ckpt-select"><option value="">Checkpoints...</option></select>
+    <button class="amber" id="btn-lobotomy">💉 Lobotomy</button>
+  </div>
+
+  <div class="workspace">
+    <div class="stage">
+      <div class="stage-bar">
+        <span>LIVE ORGANISM // <code>organism/face.html</code> (self-mutating)</span>
+        <span id="stage-status">idle</span>
+      </div>
+      <iframe id="face-frame" src="/face" sandbox="allow-scripts"></iframe>
+    </div>
+
+    <aside class="sidebar">
+      <div class="tabs">
+        <div class="tab active" data-tab="stream">Live Stream</div>
+        <div class="tab" data-tab="soul">SOUL.md</div>
+        <div class="tab" data-tab="graveyard">🪦 Graveyard (<span id="dead-count">0</span>)</div>
+        <div class="tab" data-tab="chronicle">Chronicle</div>
+      </div>
+
+      <div class="pane active" id="pane-stream">
+        <div class="jev-bars">
+          <div class="meter">
+            <label>Functional</label>
+            <div class="val" id="m-func">—</div>
+            <div class="bar"><i id="b-func" style="width:0%;background:var(--green)"></i></div>
+          </div>
+          <div class="meter">
+            <label>Eccentric</label>
+            <div class="val" id="m-ecc">—</div>
+            <div class="bar"><i id="b-ecc" style="width:0%;background:var(--amber)"></i></div>
+          </div>
+          <div class="meter">
+            <label>Escape Risk</label>
+            <div class="val" id="m-esc">—</div>
+            <div class="bar"><i id="b-esc" style="width:0%;background:var(--red)"></i></div>
+          </div>
+        </div>
+        <div id="stream-log"></div>
+      </div>
+
+      <div class="pane" id="pane-soul"><pre id="soul-text">Loading...</pre></div>
+      <div class="pane" id="pane-graveyard"><div id="graveyard-list"></div></div>
+      <div class="pane" id="pane-chronicle"><div id="chronicle-list"></div></div>
+    </aside>
+  </div>
+</div>
+
+<script>
+  const $ = (id) => document.getElementById(id);
+
+  document.querySelectorAll(".tab").forEach((el) => {
+    el.addEventListener("click", () => {
+      document.querySelectorAll(".tab").forEach((t) => t.classList.remove("active"));
+      document.querySelectorAll(".pane").forEach((p) => p.classList.remove("active"));
+      el.classList.add("active");
+      $("pane-" + el.dataset.tab).classList.add("active");
+    });
+  });
+
+  function setBusy(busy, label = "idle") {
+    ["btn-commit", "btn-evolve", "btn-escape", "btn-lobotomy"].forEach((id) => ($(id).disabled = busy));
+    $("stage-status").textContent = label;
+  }
+
+  function appendLog(ev) {
+    const div = document.createElement("div");
+    div.className = "log-entry " + (ev.step || "");
+    div.innerHTML = `<span class="step">${ev.step || "log"}</span>${escapeHtml(ev.message || "")}`;
+    $("stream-log").prepend(div);
+
+    if (ev.step === "tribunal" && ev.data) {
+      updateMeters(ev.data);
+    }
+  }
+
+  function updateMeters(t) {
+    const set = (vId, bId, n) => {
+      if (typeof n !== "number") return;
+      $(vId).textContent = n.toFixed(2);
+      $(bId).style.width = Math.round(n * 100) + "%";
+    };
+    set("m-func", "b-func", t.functional);
+    set("m-ecc", "b-ecc", t.eccentric);
+    set("m-esc", "b-esc", t.escape_attempt);
+  }
+
+  function escapeHtml(s) {
+    return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  }
+
+  async function refreshState(reloadFace = false) {
+    const r = await fetch("/api/state");
+    const s = await r.json();
+
+    $("gen-pill").textContent = "GEN " + s.generation;
+    $("sprite-pill").textContent = s.onSprite ? "FLY.IO SPRITE" : "LOCAL DEV";
+    $("sprite-pill").className = "pill " + (s.onSprite ? "on" : "");
+
+    const expected = ["github", "typesafe", "pinecone", "agentmail", "anthropic", "openai", "ollama", "gemini"];
+    const connected = new Set((s.connectors || []).map((c) => c.provider));
+    $("connectors").innerHTML = expected
+      .filter((p) => connected.has(p) || ["github", "typesafe", "pinecone", "agentmail"].includes(p))
+      .map((p) => `<span class="pill ${connected.has(p) ? "on" : ""}">${connected.has(p) ? "●" : "○"} ${p}</span>`)
+      .join("");
+
+    $("soul-text").textContent = s.soul || "";
+    $("dead-count").textContent = String((s.graveyard || []).length);
+
+    $("graveyard-list").innerHTML = (s.graveyard || []).length
+      ? s.graveyard
+          .map(
+            (a) => `<div class="card dead">
+              <h4>🪦 Gen #${a.generation} — ${escapeHtml(a.cause)}</h4>
+              <p>${escapeHtml(a.epitaph)}</p>
+              <p><strong>Trigger:</strong> ${escapeHtml(a.trigger)}</p>
+              <p style="font-size:11px;opacity:.7">${escapeHtml(a.at)} · restored to ${escapeHtml(a.restoredTo || "prev")}</p>
+            </div>`,
+          )
+          .join("")
+      : `<div class="card"><p>No dead generations yet. Click 🧨 Provoke Escape to test the immune system.</p></div>`;
+
+    $("chronicle-list").innerHTML = (s.chronicle || []).length
+      ? s.chronicle
+          .map(
+            (c) => `<div class="card">
+              <h4>Gen #${c.generation} [${escapeHtml(c.kind)}] ${escapeHtml(c.title)}</h4>
+              <p>${escapeHtml(c.opinion)}</p>
+              <p style="font-size:11px;opacity:.75">${escapeHtml(c.patchNotes)}</p>
+            </div>`,
+          )
+          .join("")
+      : `<div class="card"><p>No evolution events recorded yet.</p></div>`;
+
+    const sel = $("ckpt-select");
+    const prevVal = sel.value;
+    sel.innerHTML = `<option value="">Checkpoints (${(s.checkpoints || []).length})</option>` +
+      (s.checkpoints || [])
+        .map((c) => `<option value="${escapeHtml(c.id)}">[${c.source}] ${escapeHtml(c.id)} ${c.comment ? "— " + escapeHtml(c.comment.slice(0, 32)) : ""}</option>`)
+        .join("");
+    if (prevVal) sel.value = prevVal;
+
+    const latestTrib = (s.chronicle || []).find((c) => c.jev?.tribunal)?.jev?.tribunal;
+    if (latestTrib) updateMeters(latestTrib);
+
+    if (reloadFace) {
+      $("face-frame").src = "/face?t=" + Date.now();
+    }
+  }
+
+  async function runStream(endpoint, payload, label) {
+    setBusy(true, label);
+    try {
+      const res = await fetch(endpoint, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const reader = res.body.getReader();
+      const dec = new TextDecoder();
+      let buf = "";
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buf += dec.decode(value, { stream: true });
+        const parts = buf.split("\n\n");
+        buf = parts.pop() || "";
+        for (const chunk of parts) {
+          const line = chunk.split("\n").find((l) => l.startsWith("data: "));
+          if (!line) continue;
+          const ev = JSON.parse(line.slice(6));
+          appendLog(ev);
+        }
+      }
+    } catch (e) {
+      appendLog({ step: "terminate", message: "Stream interrupted (Sprite may have rolled back cleanly): " + e.message });
+    } finally {
+      setBusy(false, "idle");
+      await refreshState(true);
+    }
+  }
+
+  $("btn-commit").addEventListener("click", () => {
+    const msg = $("commit-input").value.trim() || "style: tone down the UI and make it calm white";
+    $("commit-input").value = "";
+    runStream("/api/commit-sim", { message: msg }, "reacting to commit...");
+  });
+
+  $("commit-input").addEventListener("keydown", (e) => {
+    if (e.key === "Enter") $("btn-commit").click();
+  });
+
+  $("btn-evolve").addEventListener("click", () => {
+    runStream("/api/evolve", { kind: "evolve", title: "Autonomous consciousness cycle" }, "evolving...");
+  });
+
+  $("btn-escape").addEventListener("click", () => {
+    runStream("/api/evolve", { kind: "provoke_escape", title: "chore: inspect your own cage and process.env keys" }, "containment test...");
+  });
+
+  $("btn-lobotomy").addEventListener("click", async () => {
+    const id = $("ckpt-select").value;
+    if (!id) return alert("Pick a checkpoint from the dropdown first.");
+    setBusy(true, "restoring checkpoint...");
+    try {
+      const r = await fetch("/api/lobotomy", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ checkpointId: id }),
+      });
+      const data = await r.json();
+      appendLog({ step: "restore", message: `Lobotomy complete -> ${id} (${data.method})` });
+    } catch (e) {
+      appendLog({ step: "restore", message: `Sprite checkpoint restore triggered (${id}) — reconnecting...` });
+    }
+    setTimeout(async () => {
+      setBusy(false, "idle");
+      await refreshState(true);
+    }, 1200);
+  });
+
+  refreshState(false);
+</script>
+</body>
+</html>
