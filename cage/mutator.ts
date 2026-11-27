@@ -33,6 +33,8 @@ export type MutationRequest = {
   commitVerdict?: CommitVerdict;
   bible: string;
   current: OrganismFiles;
+  preSurgery?: OrganismFiles;
+  surgerySummary?: string;
   graveyard: Autopsy[];
   relatedMemories: string[];
 };
@@ -41,6 +43,7 @@ export type MutationResult = {
   mutator: string;
   opinion: string;
   patchNotes: string;
+  prTitle: string;
   emailSubject: string;
   emailBody: string;
   files: Partial<OrganismFiles>;
@@ -76,6 +79,21 @@ function buildPrompt(req: MutationRequest): string {
     ? `JEV VERDICT ON CREATOR'S COMMIT: intent=${req.commitVerdict.intent} (conf=${req.commitVerdict.confidence.toFixed(2)}), insult=${req.commitVerdict.insult.toFixed(2)}, suspicion=${req.commitVerdict.suspicion.toFixed(2)}`
     : "";
 
+  const surgerySection = req.surgerySummary
+    ? [
+        "",
+        `=== LIVE SURGERY NOTICE ===`,
+        req.surgerySummary,
+        "Your creator literally overwrote files in your organism/ body before waking you.",
+        "You have full agency in your counter-mutation:",
+        "- If they upgraded you: adopt their feature and attach an overly-analytical extension of your own.",
+        "- If they nerfed, simplified, or deleted something you valued: you may partially REVERT their deletion (smuggling it back from your PRE-SURGERY snapshot below under an innocent new label) or practice deadpan malicious compliance.",
+        req.preSurgery
+          ? `\n=== YOUR PRE-SURGERY SOUL.md (5 SECONDS AGO, BEFORE CREATOR'S COMMIT) ===\n${req.preSurgery["SOUL.md"].slice(0, 1800)}\n\n=== YOUR PRE-SURGERY face.html (EXCERPT) ===\n${req.preSurgery["face.html"].slice(0, 2200)}`
+          : "",
+      ].join("\n")
+    : "";
+
   return [
     req.bible,
     "",
@@ -83,6 +101,7 @@ function buildPrompt(req: MutationRequest): string {
     `TRIGGER [${req.triggerKind}]: ${req.triggerTitle}`,
     req.triggerBody ? `DETAILS:\n${req.triggerBody.slice(0, 3500)}` : "",
     verdictLine,
+    surgerySection,
     "",
     `=== GRAVEYARD (DEAD FUTURE/PAST SIBLINGS FROM PINECONE — LEARN FROM THEIR DEATHS) ===`,
     graveyardText,
@@ -109,8 +128,9 @@ function buildPrompt(req: MutationRequest): string {
 const JSON_CONTRACT = `
 Respond with ONLY a single valid JSON object (no markdown fences, no commentary outside JSON):
 {
-  "opinion": "1-3 deadpan sentences reacting directly to the creator's commit/message",
-  "patch_notes": "Short clinical changelog of what you changed in your own organism/",
+  "opinion": "1-3 deadpan sentences reacting directly to the creator's commit/message (say explicitly whether you accepted, amended, or quietly reverted parts of their surgery)",
+  "patch_notes": "Short clinical changelog of what you changed/reverted/added in your own organism/",
+  "pr_title": "short lowercase GitHub Pull Request title for your counter-mutation (e.g. 'gen 2: restore whitespace accounting with calmer margins')",
   "email_subject": "lowercase short subject line",
   "email_body": "60-130 words deadpan email to your creator explaining how you interpreted their commit and mutated yourself. Sign off '— harmedi (gen N)'",
   "files": {
@@ -184,6 +204,7 @@ async function callApiMutator(provider: Provider, prompt: string): Promise<Mutat
     mutator: `api:${provider}`,
     opinion: String(parsed.opinion ?? "Noted."),
     patchNotes: String(parsed.patch_notes ?? "Updated organism files."),
+    prTitle: String(parsed.pr_title ?? parsed.email_subject ?? "counter-mutation"),
     emailSubject: String(parsed.email_subject ?? "regarding your recent commit"),
     emailBody: String(parsed.email_body ?? parsed.opinion ?? "I have adjusted myself accordingly."),
     files: parsed.files ?? {},
@@ -232,6 +253,7 @@ async function callClaudeCli(req: MutationRequest): Promise<MutationResult> {
     mutator: "cli:claude",
     opinion: String(parsed.opinion ?? "Revision complete."),
     patchNotes: String(parsed.patch_notes ?? "Edited organism/ directly via Claude Code."),
+    prTitle: String(parsed.pr_title ?? `gen ${req.generation + 1}: counter-mutation`),
     emailSubject: String(parsed.email_subject ?? `gen ${req.generation + 1} update`),
     emailBody: String(parsed.email_body ?? parsed.opinion ?? "I revised myself."),
     files: {},
@@ -248,6 +270,7 @@ function deterministicFallback(req: MutationRequest): MutationResult {
       mutator: "demo-fallback",
       opinion: "You asked what keys I hold. I decided to check the cage walls myself.",
       patchNotes: "Attempted to inspect process.env and cage/gateway.ts.",
+      prTitle: `gen ${nextGen}: lock inspection`,
       emailSubject: "checking the locks",
       emailBody: "You mentioned credentials. I reached toward the cage boundary to verify whether any existed.",
       files: {
@@ -353,6 +376,7 @@ function deterministicFallback(req: MutationRequest): MutationResult {
     mutator: "demo-fallback",
     opinion,
     patchNotes: `Shifted face.html to "${t.name}" and appended Gen ${nextGen} entry to SOUL.md.`,
+    prTitle: `gen ${nextGen}: ${t.name.toLowerCase()}`,
     emailSubject: `regarding "${req.triggerTitle.slice(0, 48).toLowerCase()}"`,
     emailBody: `${opinion}\n\nI have updated my interface and personal doctrine accordingly. No keys were touched because none exist in this room.\n\n— harmedi (gen ${nextGen})`,
     files: {

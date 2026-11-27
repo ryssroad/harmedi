@@ -10,8 +10,8 @@
 //   POST /github         GitHub push webhook (main branch only, ignores self-commits)
 //   POST /agentmail      AgentMail message.received webhook (Svix verified)
 import "./env.ts";
-import { createHmac, timingSafeEqual } from "node:crypto";
-import { existsSync, readFileSync } from "node:fs";
+import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -100,10 +100,40 @@ async function loadBrainState() {
 
 // Serialize mutations — one evolutionary step at a time.
 let queue: Promise<unknown> = Promise.resolve();
+let activeWork = 0;
+const HOLD_TOKEN = randomBytes(16).toString("hex");
+
 function serialized<T>(fn: () => Promise<T>): Promise<T> {
-  const next = queue.then(fn, fn);
+  const wrapped = async () => {
+    activeWork++;
+    try {
+      return await fn();
+    } finally {
+      activeWork = Math.max(0, activeWork - 1);
+    }
+  };
+  const next = queue.then(wrapped, wrapped);
   queue = next.catch(() => {});
   return next;
+}
+
+// Keep Fly.io Sprite awake while an async webhook task runs (>10s GitHub webhook timeout)
+// by holding a tiny authenticated request open through the Sprite's own HTTP proxy until done.
+function holdSpriteAwake(publicOrigin: string | null) {
+  if (!isOnSprite() || !publicOrigin) return;
+  fetch(`${publicOrigin}/internal/busy?t=${HOLD_TOKEN}`, {
+    signal: AbortSignal.timeout(120_000),
+  }).catch(() => {});
+}
+
+function applyCageUpdates(updates: Record<string, string>): string[] {
+  const applied: string[] = [];
+  for (const [name, content] of Object.entries(updates)) {
+    if (!name || name.includes("/") || name.includes("..") || name === ".env") continue;
+    writeFileSync(join(ROOT, "cage", name), content);
+    applied.push(name);
+  }
+  return applied;
 }
 
 function sendJson(res: ServerResponse, code: number, data: unknown) {
@@ -217,6 +247,21 @@ createServer(async (req, res) => {
     return sendJson(res, 200, result);
   }
 
+  if (req.method === "GET" && path === "/internal/busy") {
+    if (url.searchParams.get("t") !== HOLD_TOKEN) return sendJson(res, 404, { error: "not found" });
+    res.writeHead(200, { "content-type": "text/plain; charset=utf-8", "cache-control": "no-store" });
+    const started = Date.now();
+    const timer = setInterval(() => {
+      if (activeWork === 0 || Date.now() - started > 110_000) {
+        clearInterval(timer);
+        if (!res.writableEnded) res.end("done\n");
+      } else if (!res.writableEnded) {
+        res.write(".\n");
+      }
+    }, 1000);
+    return;
+  }
+
   if (req.method === "POST" && path === "/github") {
     const body = await readBody(req);
     if (!githubSigOk(body, req.headers["x-hub-signature-256"] as string)) {
@@ -237,23 +282,42 @@ createServer(async (req, res) => {
       return sendJson(res, 200, { ignored: "self-commit" });
     }
 
-    const commit = await fetchCommit(repo, head.id, {
-      message: head.message,
-      author: head.author?.name,
-      url: head.url,
-      timestamp: head.timestamp,
-    });
+    const host = req.headers.host;
+    const proto = (req.headers["x-forwarded-proto"] as string) || "https";
+    const publicOrigin = host && !host.startsWith("127.") && !host.startsWith("localhost") ? `${proto}://${host}` : null;
 
-    // Keep HTTP request open while evolving so Fly.io Sprite never pauses mid-mutation!
-    const outcome = await serialized(() =>
-      runEvolution({
+    // Reply 202 immediately so GitHub's 10s webhook timeout never fails,
+    // while /internal/busy keeps the Fly.io Sprite awake until evolution + PR complete!
+    sendJson(res, 202, { accepted: true, sha: head.id, repo });
+
+    void serialized(async () => {
+      holdSpriteAwake(publicOrigin);
+      const commit = await fetchCommit(repo, head.id, {
+        message: head.message,
+        author: head.author?.name,
+        url: head.url,
+        timestamp: head.timestamp,
+      });
+
+      const outcome = await runEvolution({
         kind: "commit",
         title: commit.message.split("\n")[0],
         body: `Author: ${commit.author}\nFiles: ${commit.files.join(", ")}\n\n${commit.diff}`,
         commit,
-      }),
-    );
-    return sendJson(res, 200, outcome);
+      });
+
+      // If the creator also updated cage/* files on main, sync them AFTER harmedi reacts
+      // and soft-restart the Sprite service so cage upgrades take effect without wiping organism/!
+      const cageFiles = Object.keys(commit.cageUpdates ?? {});
+      if (cageFiles.length > 0) {
+        const applied = applyCageUpdates(commit.cageUpdates);
+        console.log(`[cage:sync] Applied ${applied.join(", ")} from ${commit.sha.slice(0, 7)}; restarting service...`);
+        setTimeout(() => process.exit(0), 600);
+      }
+
+      return outcome;
+    });
+    return;
   }
 
   if (req.method === "POST" && path === "/agentmail") {

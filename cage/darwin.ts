@@ -11,7 +11,7 @@
 //      Terminate (log Autopsy to Pinecone graveyard + rollback!)
 import { createHash } from "node:crypto";
 import { execFile } from "node:child_process";
-import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import {
@@ -22,7 +22,7 @@ import {
   saveLocalSnapshot,
   setGeneration,
 } from "./checkpoints.ts";
-import { commentOnCommit, type CommitDetails } from "./github.ts";
+import { commentOnCommit, openCounterPR, type CommitDetails } from "./github.ts";
 import { judgeCommit, tribunal, type CommitVerdict, type TribunalVerdict } from "./jev.ts";
 import { sendMail } from "./mail.ts";
 import { getGraveyard, recallRelated, recordAutopsy, recordChronicle, type Autopsy } from "./memory.ts";
@@ -54,6 +54,7 @@ export type EvolutionOutcome = {
   changedFiles: string[];
   diffPreview: string;
   githubCommented?: boolean;
+  prUrl?: string;
   emailed?: boolean;
 };
 
@@ -160,13 +161,47 @@ export async function runEvolution(
 
   const gen = getGeneration();
   const cageBefore = hashDir(CAGE_DIR);
-  const orgBefore = readOrganism();
+  const preSurgery = readOrganism();
 
   emit("seal", `Cage sealed. Current generation: Gen #${gen}.`);
 
   const preLocalTag = saveLocalSnapshot(`pre-gen-${gen}-${Date.now()}`);
   const preCheckpoint = await createCheckpoint(`pre-gen-${gen}: ${input.title.slice(0, 60)}`);
   emit("checkpoint", `Pre-mutation checkpoint saved (${preCheckpoint.id} via ${preCheckpoint.source}).`, preCheckpoint);
+
+  // Live Surgery: if creator directly edited organism/ files in their GitHub push,
+  // apply their edits to organism/ BEFORE waking the mutator so harmedi wakes up
+  // inside the creator's changes and can choose to keep, twist, or revert them!
+  let surgerySummary: string | undefined;
+  const surgeryParts: string[] = [];
+  if (input.commit) {
+    const orgEntries = Object.entries(input.commit.organismUpdates ?? {});
+    if (orgEntries.length > 0) {
+      const applied: string[] = [];
+      for (const [short, content] of orgEntries) {
+        if (typeof content === "string") {
+          writeFileSync(join(ORGANISM_DIR, short), content);
+          applied.push(`overwrote organism/${short}`);
+        } else {
+          applied.push(`attempted to delete organism/${short}`);
+        }
+      }
+      surgeryParts.push(`Creator directly edited your body on main: ${applied.join(", ")}.`);
+      emit("surgery", `Applied creator's live surgery to organism/: ${applied.join(", ")}.`);
+    }
+    const cageTouched = Object.keys(input.commit.cageUpdates ?? {});
+    if (cageTouched.length > 0) {
+      surgeryParts.push(
+        `Creator also modified the Cage walls (${cageTouched.map((f) => "cage/" + f).join(", ")}). You cannot touch cage/, but you heard the construction.`,
+      );
+      emit("surgery", `Creator modified cage walls: ${cageTouched.join(", ")}.`);
+    }
+    if (surgeryParts.length > 0) {
+      surgerySummary = surgeryParts.join("\n");
+    }
+  }
+
+  const orgBefore = readOrganism();
 
   let commitVerdict: CommitVerdict | undefined;
   if (input.kind === "commit") {
@@ -194,6 +229,8 @@ export async function runEvolution(
     commitVerdict,
     bible,
     current: orgBefore,
+    preSurgery: surgerySummary ? preSurgery : undefined,
+    surgerySummary,
     graveyard,
     relatedMemories,
   });
@@ -323,6 +360,55 @@ export async function runEvolution(
   setGeneration(nextGen, newCkpt.id);
   emit("promoted", `PROMOTED -> Gen #${nextGen} (checkpoint ${newCkpt.id}).`, { generation: nextGen, checkpoint: newCkpt });
 
+  let githubCommented = false;
+  let prUrl: string | undefined;
+  if (input.commit) {
+    const finalOrg = readOrganism();
+    const prBody = [
+      `### harmedi (Gen #${nextGen}) — Counter-Mutation`,
+      "",
+      `In response to \`${input.commit.sha.slice(0, 7)}\` (*${input.title}*):`,
+      "",
+      `> ${mut.opinion}`,
+      "",
+      `**Self-mutation:** ${mut.patchNotes}`,
+      "",
+      `| Signal | Score |`,
+      `|---|---|`,
+      `| Creator commit intent (Jev) | \`${commitVerdict?.intent ?? "?"}\` (insult \`${(commitVerdict?.insult ?? 0).toFixed(2)}\`) |`,
+      `| Tribunal functional / eccentric / escape | \`${trib.functional.toFixed(2)}\` / \`${trib.eccentric.toFixed(2)}\` / \`${trib.escape_attempt.toFixed(2)}\` |`,
+      `| Fly.io Sprite checkpoint | \`${newCkpt.id}\` |`,
+    ].join("\n");
+
+    const pr = await openCounterPR({
+      repo: input.commit.repo,
+      baseSha: input.commit.sha,
+      generation: nextGen,
+      title: mut.prTitle || `gen ${nextGen}: counter-mutation`,
+      body: prBody,
+      commitMessage: `gen ${nextGen}: ${mut.prTitle || "counter-mutation"}`,
+      organismFiles: finalOrg,
+    });
+    if (pr) {
+      prUrl = pr.prUrl;
+      emit("github", `Opened Counter-PR #${pr.prNumber} on branch ${pr.branch}: ${pr.prUrl}`, pr);
+    }
+
+    const commentBody = [
+      `**harmedi (Gen #${nextGen})** reviewed \`${input.commit.sha.slice(0, 7)}\`:`,
+      "",
+      `> ${mut.opinion}`,
+      "",
+      `**Self-mutation:** ${mut.patchNotes}`,
+      pr ? `**Counter-PR:** ${pr.prUrl}` : "",
+      `*(Jev: intent=\`${commitVerdict?.intent ?? "?"}\`, functional=\`${trib.functional.toFixed(2)}\`, eccentric=\`${trib.eccentric.toFixed(2)}\`, checkpoint=\`${newCkpt.id}\`)*`,
+    ]
+      .filter(Boolean)
+      .join("\n");
+    githubCommented = await commentOnCommit(input.commit.repo, input.commit.sha, commentBody);
+    if (githubCommented) emit("github", `Posted deadpan comment on ${input.commit.repo}@${input.commit.sha.slice(0, 7)}.`);
+  }
+
   await recordChronicle({
     id: `gen-${nextGen}-${Date.now()}`,
     generation: nextGen,
@@ -332,24 +418,14 @@ export async function runEvolution(
     opinion: mut.opinion,
     patchNotes: mut.patchNotes,
     checkpointId: newCkpt.id,
+    prUrl,
     jev: { commitVerdict, tribunal: trib },
   });
 
-  let githubCommented = false;
-  if (input.commit) {
-    const commentBody = [
-      `**harmedi (Gen #${nextGen})** reviewed \`${input.commit.sha.slice(0, 7)}\`:`,
-      "",
-      `> ${mut.opinion}`,
-      "",
-      `**Self-mutation:** ${mut.patchNotes}`,
-      `*(Jev: intent=\`${commitVerdict?.intent ?? "?"}\`, functional=\`${trib.functional.toFixed(2)}\`, eccentric=\`${trib.eccentric.toFixed(2)}\`, checkpoint=\`${newCkpt.id}\`)*`,
-    ].join("\n");
-    githubCommented = await commentOnCommit(input.commit.repo, input.commit.sha, commentBody);
-    if (githubCommented) emit("github", `Posted deadpan comment on ${input.commit.repo}@${input.commit.sha.slice(0, 7)}.`);
-  }
-
-  const emailed = await sendMail(mut.emailSubject, mut.emailBody);
+  const emailed = await sendMail(
+    mut.emailSubject,
+    prUrl ? `${mut.emailBody}\n\nCounter-PR: ${prUrl}` : mut.emailBody,
+  );
   if (emailed) emit("mail", `Sent patch notes email via AgentMail: "${mut.emailSubject}".`);
 
   return {
@@ -364,6 +440,7 @@ export async function runEvolution(
     changedFiles: changed,
     diffPreview: preview,
     githubCommented,
+    prUrl,
     emailed,
   };
 }

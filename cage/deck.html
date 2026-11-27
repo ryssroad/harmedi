@@ -296,6 +296,7 @@
               <h4>Gen #${c.generation} [${escapeHtml(c.kind)}] ${escapeHtml(c.title)}</h4>
               <p>${escapeHtml(c.opinion)}</p>
               <p style="font-size:11px;opacity:.75">${escapeHtml(c.patchNotes)}</p>
+              ${c.prUrl ? `<p style="font-size:11px"><a href="${escapeHtml(c.prUrl)}" target="_blank" style="color:var(--cyan)">↗ Counter-PR on GitHub</a></p>` : ""}
             </div>`,
           )
           .join("")

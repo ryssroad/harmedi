@@ -31,6 +31,7 @@ export type ChronicleEntry = {
   opinion: string;
   patchNotes: string;
   checkpointId?: string;
+  prUrl?: string;
   jev?: Record<string, unknown>;
 };
 
