@@ -258,9 +258,16 @@
     return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
   }
 
+  let lastKnownGen = null;
+  let lastKnownDead = null;
   async function refreshState(reloadFace = false) {
     const r = await fetch("/api/state");
     const s = await r.json();
+
+    const genChanged = lastKnownGen !== null && s.generation !== lastKnownGen;
+    const deadChanged = lastKnownDead !== null && (s.graveyard || []).length !== lastKnownDead;
+    lastKnownGen = s.generation;
+    lastKnownDead = (s.graveyard || []).length;
 
     $("gen-pill").textContent = "GEN " + s.generation;
     $("sprite-pill").textContent = s.onSprite ? "FLY.IO SPRITE" : "LOCAL DEV";
@@ -313,8 +320,14 @@
     const latestTrib = (s.chronicle || []).find((c) => c.jev?.tribunal)?.jev?.tribunal;
     if (latestTrib) updateMeters(latestTrib);
 
-    if (reloadFace) {
+    if (reloadFace || genChanged) {
       $("face-frame").src = "/face?t=" + Date.now();
+      if (genChanged && !reloadFace) {
+        appendLog({ step: "promoted", message: `Live update detected -> Gen #${s.generation} (from GitHub/Email trigger).` });
+      }
+    }
+    if (deadChanged && !reloadFace) {
+      appendLog({ step: "terminate", message: `New autopsy archived in Pinecone Graveyard (${(s.graveyard || []).length} total).` });
     }
   }
 
@@ -390,6 +403,10 @@
   });
 
   refreshState(false);
+  // Keep Observation Deck live-synced with real git push / AgentMail mutations
+  setInterval(() => {
+    if (!$("btn-commit").disabled) refreshState(false).catch(() => {});
+  }, 5000);
 </script>
 </body>
 </html>
