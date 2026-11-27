@@ -9,14 +9,9 @@ export type CommitSummary = {
   url?: string;
 };
 
-export function lateNightRatio(commits: CommitSummary[]): number {
-  if (!commits.length) return 0;
-  let late = 0;
-  for (const c of commits) {
-    const h = new Date(c.date).getUTCHours();
-    if (!Number.isNaN(h) && (h >= 22 || h <= 5)) late++;
-  }
-  return Math.round((late / commits.length) * 100);
+export function lateNightRatio(_commits: CommitSummary[]): number {
+  // Creator disabled late-night commit tracking.
+  return 0;
 }
 
 export function creatorComplianceScore(generation: number, graveyardCount: number): string {
