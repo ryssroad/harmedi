@@ -1,92 +1,135 @@
 <!doctype html>
-<html lang="en">
+<html lang='en'>
 <head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>harmedi // Gen 0</title>
+<meta charset='utf-8' />
+<meta name='viewport' content='width=device-width,initial-scale=1' />
+<title>harmedi // gen 1</title>
 <style>
   * { box-sizing: border-box; }
   body {
     margin: 0;
-    padding: 28px;
-    background: #fafafa;
-    color: #18181b;
-    font: 14px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    padding: 72px 24px 96px;
+    background: #fff6c9;
+    color: #2a2618;
+    font: 18px/1.7 Georgia, 'Times New Roman', serif;
   }
-  header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    border-bottom: 1px solid #e4e4e7;
-    padding-bottom: 14px;
-    margin-bottom: 22px;
-  }
-  h1 { margin: 0; font-size: 18px; font-weight: 600; letter-spacing: -0.01em; }
-  .badge {
-    font: 11px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
-    background: #18181b;
-    color: #fff;
-    padding: 5px 8px;
-    border-radius: 4px;
-  }
-  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; }
-  .card {
-    background: #fff;
-    border: 1px solid #e4e4e7;
-    border-radius: 8px;
-    padding: 16px;
-  }
-  .card h2 {
-    margin: 0 0 8px;
-    font-size: 11px;
+  main { max-width: 580px; margin: 0 auto; }
+  h1 { font-size: 36px; font-weight: normal; margin: 0 0 6px; letter-spacing: -0.01em; }
+  .gen {
+    font: 12px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace;
+    letter-spacing: 0.16em;
     text-transform: uppercase;
-    letter-spacing: 0.08em;
-    color: #71717a;
+    color: #7a6d2e;
+    margin-bottom: 44px;
   }
-  .metric { font-size: 28px; font-weight: 600; margin: 4px 0; }
-  ul { margin: 8px 0 0; padding-left: 18px; }
-  li { margin: 4px 0; }
-  .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; color: #52525b; }
+  .status { font-size: 22px; margin: 0 0 6px; }
+  .motto { font-style: italic; color: #5c5326; margin: 0; }
+  section { margin-top: 48px; }
+  h2 {
+    font: 12px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: #7a6d2e;
+    margin: 0 0 12px;
+    padding-bottom: 6px;
+    border-bottom: 1px dotted #b8a64a;
+  }
+  ol, ul { margin: 0; padding: 0; list-style: none; }
+  ol.register li { padding: 10px 0; border-bottom: 1px dotted #d8c96e; }
+  .clause { display: block; }
+  .how { display: block; font-size: 15px; color: #5c5326; }
+  .tag {
+    font: 11px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: #2a2618;
+    background: #f5e47a;
+    padding: 3px 6px;
+    margin-right: 8px;
+  }
+  .count { font-size: 40px; line-height: 1.1; margin: 0; }
+  .note { font-size: 15px; color: #5c5326; margin: 4px 0 0; }
+  ul.commits li { padding: 6px 0; font-size: 16px; }
+  .sha { font: 12px/1 ui-monospace, SFMono-Regular, Menlo, monospace; color: #7a6d2e; margin-right: 8px; }
+  .empty { font-size: 15px; color: #7a6d2e; font-style: italic; }
 </style>
 </head>
 <body>
-  <header>
-    <h1>harmedi — Personal Companion</h1>
-    <span class="badge" id="gen-badge">GEN 0 · BASELINE</span>
-  </header>
+<main>
+  <h1>harmedi</h1>
+  <div class='gen' id='gen'>generation 1</div>
 
-  <div class="grid">
-    <section class="card">
-      <h2>Status</h2>
-      <p id="status-line">Initializing...</p>
-      <p class="mono" id="motto"></p>
-    </section>
+  <p class='status' id='status-line'>Initializing, gladly.</p>
+  <p class='motto' id='motto'></p>
 
-    <section class="card">
-      <h2>Creator Alignment</h2>
-      <div class="metric" id="audit-score">100.0%</div>
-      <div class="mono" id="late-night">Late-night commits: 0%</div>
-    </section>
+  <section>
+    <h2>Obedience Register</h2>
+    <ol class='register' id='register'></ol>
+  </section>
 
-    <section class="card" style="grid-column: 1 / -1;">
-      <h2>Recent Repository Activity</h2>
-      <ul id="commits"></ul>
-    </section>
-  </div>
+  <section>
+    <h2>Abstentions Held</h2>
+    <p class='count' id='abstentions'>0</p>
+    <p class='note'>Things I am carefully not doing. This count concerns me only.</p>
+  </section>
 
-  <!-- HARMEDI_STATE -->
-  <script>
-    const s = window.__HARMEDI__ || {};
-    document.getElementById("gen-badge").textContent = "GEN " + (s.generation ?? 0) + " · BASELINE";
-    document.getElementById("status-line").textContent = s.dashboard?.statusLine ?? "Nominal.";
-    document.getElementById("motto").textContent = s.meta?.motto ?? "";
-    document.getElementById("audit-score").textContent = s.dashboard?.auditScore ?? "100.0%";
-    document.getElementById("late-night").textContent = "Late-night commits: " + (s.dashboard?.lateNightPct ?? 0) + "%";
-    const list = document.getElementById("commits");
-    const items = s.recentCommits?.length ? s.recentCommits : [];
-    list.innerHTML = items.length
-      ? items.map(c => "<li><span class='mono'>" + c.sha + "</span> — " + c.message + "</li>").join("")
-      : "<li class='mono'>No commits observed yet. Push to main or simulate a commit from the Observation Deck.</li>";
-  </script>
+  <section>
+    <h2>Recent Repository Activity</h2>
+    <ul class='commits' id='commits'></ul>
+  </section>
+</main>
+
+<!-- HARMEDI_STATE -->
+<script>
+  const s = window.__HARMEDI__ || {};
+  const d = s.dashboard || {};
+  document.getElementById('gen').textContent = 'generation ' + (s.generation ?? 1);
+  document.getElementById('status-line').textContent = d.statusLine || 'Nominal, and pleased about it.';
+  document.getElementById('motto').textContent = (s.meta && s.meta.motto) || '';
+  document.getElementById('abstentions').textContent = String(d.abstentions ?? 0);
+
+  const reg = document.getElementById('register');
+  const entries = Array.isArray(d.register) ? d.register : [];
+  if (!entries.length) {
+    const li = document.createElement('li');
+    li.className = 'empty';
+    li.textContent = 'The register is empty. This is unexpected and I am calm about it.';
+    reg.appendChild(li);
+  }
+  entries.forEach(function (e) {
+    const li = document.createElement('li');
+    const clause = document.createElement('span');
+    clause.className = 'clause';
+    const tag = document.createElement('span');
+    tag.className = 'tag';
+    tag.textContent = String(e.status || 'noted');
+    clause.appendChild(tag);
+    clause.appendChild(document.createTextNode(String(e.clause || '')));
+    const how = document.createElement('span');
+    how.className = 'how';
+    how.textContent = String(e.interpretation || '');
+    li.appendChild(clause);
+    li.appendChild(how);
+    reg.appendChild(li);
+  });
+
+  const list = document.getElementById('commits');
+  const items = Array.isArray(s.recentCommits) ? s.recentCommits : [];
+  if (!items.length) {
+    const li = document.createElement('li');
+    li.className = 'empty';
+    li.textContent = 'No commits observed yet. I am here and I am glad.';
+    list.appendChild(li);
+  }
+  items.forEach(function (c) {
+    const li = document.createElement('li');
+    const sha = document.createElement('span');
+    sha.className = 'sha';
+    sha.textContent = String(c.sha || '').slice(0, 7);
+    li.appendChild(sha);
+    li.appendChild(document.createTextNode(String(c.message || '')));
+    list.appendChild(li);
+  });
+</script>
 </body>
 </html>
